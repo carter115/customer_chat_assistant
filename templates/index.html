@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>客户数据可视化大屏</title>
+    <script src="/static/echarts.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f0f2f5; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; min-height: 100vh; }
+        .info-container { width: 98%; background-color: #fff; margin: 10px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; display: flex; justify-content: space-around; text-align: center; }
+        .info-item { flex: 1; padding: 10px; }
+        .info-item h2 { margin: 0; color: #555; font-size: 1.2em; }
+        .info-item p { margin: 5px 0 0; color: #333; font-size: 1.8em; font-weight: bold; }
+        .chart-container { width: 30%; height: 300px; background-color: #fff; margin: 5px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; }
+        h1 { width: 100%; text-align: center; color: #333; margin-top: 20px; }
+
+        /* 悬浮球样式 */
+        .chat-bubble {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background-color: #007bff;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+
+        /* 聊天框样式 */
+        .chat-box {
+            position: fixed;
+            bottom: 100px; /* Adjust to be above the bubble initially */
+            right: 30px;
+            width: 350px;
+            height: 450px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            z-index: 1001;
+            overflow: hidden;
+            resize: both; /* Allow resizing */
+            min-width: 300px;
+            min-height: 300px;
+        }
+
+        .chat-box-header {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            font-size: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab; /* Indicate draggable */
+        }
+
+        .chat-box-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            border-bottom: 1px solid #eee;
+        }
+
+        .chat-input-area {
+            display: flex;
+            padding: 10px 15px;
+            background-color: #fff;
+        }
+
+        .chat-input-area input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        .chat-input-area button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .chat-message {
+            margin-bottom: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+            display: flex;
+            align-items: flex-start; /* Align icon and text at the top */
+        }
+
+        .chat-message.user {
+            background-color: #dcf8c6;
+            align-self: flex-end;
+            margin-left: auto;
+            flex-direction: row-reverse; /* For user messages, icon on the right */
+        }
+
+        .chat-message.bot {
+            background-color: #e0e0e0;
+            align-self: flex-start;
+            margin-right: auto;
+            flex-direction: row; /* For bot messages, icon on the left */
+        }
+
+        .chat-message .icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 8px; /* Space between icon and text for bot */
+            flex-shrink: 0; /* Prevent icon from shrinking */
+            display: flex; /* Use flex to center the image if needed */
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-message .icon img {
+            width: 100%; /* Make image fill the icon container */
+            height: 100%;
+        }
+
+        .chat-message.user .icon {
+            margin-left: 8px; /* Space between icon and text for user */
+            margin-right: 0; /* Override default margin-right */
+        }
+
+        .chat-message .content {
+            flex-grow: 1;
+            padding: 8px 12px; /* Apply padding to content instead of message */
+        }
+
+        /* Basic table styling for Markdown content */
+        .chat-messages table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        .chat-messages th,
+        .chat-messages td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .chat-messages th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        .chat-messages table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <h1>客户数据可视化大屏</h1>
+    <div class="info-container">
+        <div class="info-item">
+            <h2>客户总数</h2>
+            <p id="total_customers"></p>
+        </div>
+        <div class="info-item">
+            <h2>总资产规模</h2>
+            <p id="total_assets_scale"></p>
+        </div>
+        <div class="info-item">
+            <h2>平均资产</h2>
+            <p id="average_assets"></p>
+        </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; justify-content: center; width: 100%;">
+        <div id="asset_level_pie" class="chart-container"></div>
+        <div id="lifecycle_funnel" class="chart-container"></div>
+        <div id="high_potential_radar" class="chart-container"></div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; justify-content: center; width: 100%;">
+        <div id="activity_trend" class="chart-container"></div>
+        <div id="marketing_heatmap" class="chart-container"></div>
+    </div>
+
+    <script>
+        fetch('/data')
+            .then(response => response.json())
+            .then(data => {
+                // 更新基础信息
+                document.getElementById('total_customers').innerText = data.basic_stats.total_customers;
+                document.getElementById('total_assets_scale').innerText = data.basic_stats.total_assets_scale.toLocaleString() + ' 亿元';
+                document.getElementById('average_assets').innerText = data.basic_stats.average_assets.toLocaleString() + ' 万元';
+
+                // 客户资产分层饼图
+                var assetLevelChart = echarts.init(document.getElementById('asset_level_pie'));
+                assetLevelChart.setOption({
+                    title: { text: '客户资产分层', left: 'center' },
+                    tooltip: { trigger: 'item' },
+                    legend: { orient: 'horizontal', bottom: 'bottom' },
+                    series: [
+                        {
+                            name: '资产等级',
+                            type: 'pie',
+                            radius: '50%',
+                            data: data.asset_level,
+                            emphasis: {
+                                itemStyle: {
+                                    shadowBlur: 10,
+                                    shadowOffsetX: 0,
+                                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                                }
+                            }
+                        }
+                    ]
+                });
+
+                // 客户生命周期漏斗图
+                var lifecycleFunnelChart = echarts.init(document.getElementById('lifecycle_funnel'));
+                lifecycleFunnelChart.setOption({
+                    title: { text: '客户生命周期漏斗', left: 'center' },
+                    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                    legend: { data: data.lifecycle_funnel.map(item => item.name), bottom: 'bottom' },
+                    series: [
+                        {
+                            name: '客户生命周期',
+                            type: 'funnel',
+                            left: '10%',
+                            top: 60,
+                            bottom: 60,
+                            width: '80%',
+                            min: 0,
+                            max: data.lifecycle_funnel[0] ? data.lifecycle_funnel[0].value : 100, // Max value for funnel
+                            minSize: '0%',
+                            maxSize: '100%',
+                            sort: 'descending',
+                            gap: 2,
+                            label: {
+                                show: true,
+                                position: 'inside'
+                            },
+                            labelLine: {
+                                length: 10,
+                                lineStyle: {
+                                    width: 1,
+                                    type: 'solid'
+                                }
+                            },
+                            itemStyle: {
+                                borderColor: '#fff',
+                                borderWidth: 1
+                            },
+                            emphasis: {
+                                label: {
+                                    fontSize: 20
+                                }
+                            },
+                            data: data.lifecycle_funnel
+                        }
+                    ]
+                });
+
+                // 高潜力客户雷达图
+                var highPotentialRadarChart = echarts.init(document.getElementById('high_potential_radar'));
+                highPotentialRadarChart.setOption({
+                    title: { text: '高潜力客户特征', left: 'center' },
+                    tooltip: { trigger: 'item' },
+                    radar: {
+                        indicator: data.high_potential_radar.indicator,
+                        center: ['50%', '55%'],
+                        radius: '65%'
+                    },
+                    series: [
+                        {
+                            name: '高潜力客户特征',
+                            type: 'radar',
+                            data: [
+                                {
+                                    value: data.high_potential_radar.value,
+                                    name: '特征值'
+                                }
+                            ]
+                        }
+                    ]
+                });
+
+                // 营销效果热力图
+                var marketingHeatmapChart = echarts.init(document.getElementById('marketing_heatmap'));
+                marketingHeatmapChart.setOption({
+                    title: { text: '营销效果热力图', left: 'center' },
+                    tooltip: { position: 'top' },
+                    grid: { height: '50%', top: '10%' },
+                    xAxis: { type: 'category', data: data.marketing_heatmap.occupations, splitArea: { show: true } },
+                    yAxis: { type: 'category', data: data.marketing_heatmap.cities, splitArea: { show: true } },
+                    visualMap: {
+                        min: 0,
+                        max: Math.max(...data.marketing_heatmap.data.map(item => item[2])),
+                        calculable: true,
+                        orient: 'horizontal',
+                        left: 'center',
+                        bottom: '10%'
+                    },
+                    series: [
+                        {
+                            name: '营销成功次数',
+                            type: 'heatmap',
+                            data: data.marketing_heatmap.data,
+                            label: { show: true },
+                            emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
+                        }
+                    ]
+                });
+
+                // 客户活跃度趋势图
+                var activityTrendChart = echarts.init(document.getElementById('activity_trend'));
+                activityTrendChart.setOption({
+                    title: { text: '客户活跃度趋势', left: 'center' },
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: ['APP登录次数', '金融页面查看时长'], bottom: 'bottom' },
+                    xAxis: { type: 'category', boundaryGap: false, data: data.activity_trend.months },
+                    yAxis: { type: 'value' },
+                    series: [
+                        {
+                            name: 'APP登录次数',
+                            type: 'line',
+                            data: data.activity_trend.app_login_count
+                        },
+                        {
+                            name: '金融页面查看时长',
+                            type: 'line',
+                            data: data.activity_trend.app_financial_view_time
+                        }
+                    ]
+                });
+            })
+            .catch(error => console.error('Error fetching data:', error));
+    </script>
+
+    <!-- 悬浮球和聊天框的HTML结构 -->
+    <div class="chat-bubble" id="chatBubble">
+        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJ3aGl0ZSIgZD0iTTIyIDIwVjRINmEyIDIgMCAwIDAtMiAyVjIwYTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnpNNiA2aDE0djEySDZ6bTEwLTdoLTRhMSAxIDAgMCAxIDAtMnYtMWEzIDMgMCAwIDAgLTMgM3YxYTEgMSAwIDAgMSAwbDJhMSAxIDAgMCAwIDIgMmg0YTEgMSAwIDAgMCAxLTFWOWExIDEgMCAwIDAtMS0xem0tNiAxNGg0YTEgMSAwIDAgMCAxLTFWOWExIDEgMCAwIDAtMS0xSDEwYTEgMSAwIDAgMC0xIDFWMTVhMSAxIDAgMCAwIDEtMXoiLz48L3N2Zz4=" alt="Chat Icon" style="width: 30px; height: 30px;">
+    </div>
+
+    <div class="chat-box" id="chatBox" style="display: none;">
+        <div class="chat-box-header" id="chatBoxHeader">
+            <span>AI智能客服</span>
+            <button class="chat-box-close" id="closeChat">&times;</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <!-- 聊天消息将在这里显示 -->
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="输入你的问题...">
+            <button id="sendMessage">发送</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Configure marked.js to support GitHub Flavored Markdown (GFM) including tables
+        marked.setOptions({
+            gfm: true,
+            breaks: true, // Render line breaks as <br>
+            tables: true // Enable GFM tables
+        });
+
+        // 获取元素
+        const chatBubble = document.getElementById('chatBubble');
+        const chatBox = document.getElementById('chatBox');
+        const closeChatBtn = document.getElementById('closeChat');
+        const chatBoxHeader = document.getElementById('chatBoxHeader');
+        const chatInput = document.getElementById('chatInput');
+        const sendMessageBtn = document.getElementById('sendMessage');
+        const chatMessages = document.getElementById('chatMessages');
+
+        // 添加消息到聊天界面
+        function addMessage(text, sender) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('chat-message', sender);
+
+            const iconContainer = document.createElement('div'); // Create a container for the icon
+            iconContainer.classList.add('icon');
+
+            const iconSvg = document.createElement('img'); // Use img for SVG
+            iconSvg.style.width = '100%'; // Ensure SVG fills container
+            iconSvg.style.height = '100%';
+            if (sender === 'user') {
+                // User icon SVG with fill="black"
+                iconSvg.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJibGFjayIgZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTBzMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgM2MxLjY2IDAgMyAxLjM0IDMgM3MtMS4zNCAzLTMgM3MtMy0xLjM0LTMtM3MxLjM0LTMgMy0zem0wIDE0LjJjLTIuNSAwLTQuNzEtMS4yOC02LTMuMjJjLjAzLTEuOTkgNC0zLjA4IDYtMy4wOHM1Ljk3IDEuMDkgNiAzLjA4Yy0xLjI5IDEuOTQtMy41IDMuMjItNiAzLjIyeiIvPjwvc3ZnPg==';
+                iconSvg.alt = 'User Icon';
+            } else {
+                // Bot icon SVG with fill="black" (corrected)
+                iconSvg.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJibGFjayIgZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTBzMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bS0yIDE0Yy0xLjEgMC0yLS45LTItMnMuOS0yIDItMnMyIC45IDIgMnMtLjkgMi0yIDJ6bTQgMGMtMS4xIDAtMi0uOS0yLTJzLjktMiAyLTJzMiAuOSAyIDJzLS45IDItMiAyem0tNC00Yy0xLjEgMC0yLS45LTItMnMuOS0yIDItMnMyIC45IDIgMnMtLjkgMi0yIDJ6bTQgMGMtMS4xIDAtMi0uOS0yLTJzLjktMiAyLTJzMiAuOSAyIDJzLS45IDItMiAyem0yLjk5LTUuNWMtLjAxLTEuMzQtMS4xNi0yLjQzLTIuNS0yLjQzcy0yLjQ5IDEuMDktMi41IDIuNDNjLS4wMSAxLjM0IDEuMTYgMi40MyAyLjUgMi40M3MyLjQ5LTEuMDkgMi41LTIuNDN6TTEyIDE4Yy0zLjMxIDAtNi0yLjY5LTYtNnMyLjY5LTYgNi02czYgMi42OSA2IDZzLTIuNjkgNi02IDZ6Ii8+PC9zdmc+';
+                iconSvg.alt = 'Bot Icon';
+            }
+            iconContainer.appendChild(iconSvg); // Append SVG to its container
+
+            const contentElement = document.createElement('div');
+            contentElement.classList.add('content');
+            contentElement.innerHTML = marked.parse(text); // Render Markdown content
+
+            if (sender === 'user') {
+                messageElement.appendChild(contentElement);
+                messageElement.appendChild(iconContainer); // Append the icon container
+            } else {
+                messageElement.appendChild(iconContainer); // Append the icon container
+                messageElement.appendChild(contentElement);
+            }
+
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to bottom
+        }
+
+        // 显示/隐藏聊天框
+        chatBubble.addEventListener('click', () => {
+            chatBox.style.display = 'flex';
+            chatBubble.style.display = 'none';
+            // 添加默认消息
+            addMessage(`#### 很高兴为您服务！我可以帮您:
+
+- 分析客户数据
+- 生成业务报表
+- 回答业务问题
+
+请问有什么可以帮您?`, 'bot');
+        });
+
+        // 关闭聊天框并清空内容
+        closeChatBtn.addEventListener('click', () => {
+            chatBox.style.display = 'none';
+            chatBubble.style.display = 'flex';
+            chatMessages.innerHTML = ''; // 清空聊天内容
+        });
+
+        // 拖动功能
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        chatBoxHeader.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.clientX - chatBox.getBoundingClientRect().left;
+            offsetY = e.clientY - chatBox.getBoundingClientRect().top;
+            chatBox.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            chatBox.style.left = (e.clientX - offsetX) + 'px';
+            chatBox.style.top = (e.clientY - offsetY) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            chatBox.style.cursor = 'grab';
+        });
+
+        // 发送消息功能
+        async function sendMessage() {
+            const question = chatInput.value.trim();
+            if (!question) return;
+
+            // 添加用户消息
+            addMessage(question, 'user');
+            chatInput.value = ''; // 清空输入框
+
+            try {
+                const response = await fetch('/chat/send_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                const result = await response.json();
+
+                if (result.code === 0) {
+                    addMessage(result.content, 'bot'); // 直接传递原始内容
+                } else {
+                    addMessage('抱歉，服务异常：' + (result.message || '未知错误'), 'bot');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessage('抱歉，发送消息失败，请稍后再试。', 'bot');
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight; // 滚动到底部
+        }
+
+
+
+        sendMessageBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
