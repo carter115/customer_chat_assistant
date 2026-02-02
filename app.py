@@ -1,4 +1,5 @@
 import json
+from typing import Dict, List
 import pandas as pd
 from flask import Flask, render_template, jsonify,request
 
@@ -133,20 +134,37 @@ def get_marketing_heatmap_data(customer_base_df, customer_behavior_df):
     }
 
 # 客户活跃度趋势图数据 (示例，需要根据实际时间序列数据来调整)
-def get_activity_trend_data(df):
+def get_activity_trend_data(df: pd.DataFrame) -> Dict[str, List]:
     """
     生成客户活跃度趋势图所需数据。
+
+    Args:
+        df: 客户行为资产 DataFrame，需包含 stat_month、app_login_count、app_financial_view_time 列
+
+    Returns:
+        包含月份、APP登录次数、金融页面查看时长的字典
     """
-    # 确保 'stat_month' 是日期格式
-    df['stat_month'] = pd.to_datetime(df['stat_month'])
-    # 按月份聚合，计算平均APP登录次数和金融页面查看时长
-    monthly_activity = df.groupby(df['stat_month'].dt.to_period('M'))[['app_login_count', 'app_financial_view_time']].mean().reset_index()
-    monthly_activity['stat_month'] = monthly_activity['stat_month'].astype(str)
+    # 输入验证
+    required_columns = {'stat_month', 'app_login_count', 'app_financial_view_time'}
+    if missing_cols := required_columns - set(df.columns):
+        return {'months': [], 'app_login_count': [], 'app_financial_view_time': []}
+
+    if df.empty:
+        return {'months': [], 'app_login_count': [], 'app_financial_view_time': []}
+
+    # 避免修改原数据，创建副本
+    df_copy = df.copy()
+    df_copy['stat_month'] = pd.to_datetime(df_copy['stat_month'])
+
+    # 按月份聚合，计算平均值
+    monthly_activity = df_copy.groupby(
+        df_copy['stat_month'].dt.to_period('M')
+    )[['app_login_count', 'app_financial_view_time']].mean().reset_index()
 
     return {
-        'months': monthly_activity['stat_month'].tolist(),
-        'app_login_count': monthly_activity['app_login_count'].tolist(),
-        'app_financial_view_time': monthly_activity['app_financial_view_time'].tolist()
+        'months': monthly_activity['stat_month'].astype(str).tolist(),
+        'app_login_count': monthly_activity['app_login_count'].fillna(0).tolist(),
+        'app_financial_view_time': monthly_activity['app_financial_view_time'].fillna(0).tolist()
     }
 
 @app.route('/')
